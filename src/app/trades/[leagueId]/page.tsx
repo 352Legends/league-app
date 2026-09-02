@@ -4,12 +4,12 @@ import { buildTradeBoard, type TradeProposal } from "@/lib/analytics/trades";
 import { loadPlayerIdCrosswalk, loadSnapCounts, loadWeeklyPlayerStats } from "@/lib/nflverse/client";
 import { sleeper, SleeperApiError } from "@/lib/sleeper/client";
 
- type TradePageProps = {
+type TradePageProps = {
   params: Promise<{ leagueId: string }>;
   searchParams: Promise<{ sleeperUserId?: string; sleeperUsername?: string }>;
 };
 
-function TradeCard({ proposal, rank }: { proposal: TradeProposal; rank: number }) {
+function TradeCard({ proposal, rank, impactHref }: { proposal: TradeProposal; rank: number; impactHref: string }) {
   return (
     <article className="trade-card">
       <div className="trade-rank">#{rank}</div>
@@ -53,6 +53,7 @@ function TradeCard({ proposal, rank }: { proposal: TradeProposal; rank: number }
         <ul className="reason-list">
           {proposal.reasons.map((reason) => <li key={reason}>{reason}</li>)}
         </ul>
+        <Link href={impactHref} className="connect-button trade-impact-button">Simulate +{proposal.netLineupGain.toFixed(1)} pts/week championship impact →</Link>
       </div>
     </article>
   );
@@ -174,6 +175,7 @@ export default async function TradeLeaguePage({ params, searchParams }: TradePag
         </div>
         <div className="hero-cta">
           <Link href={`/league/${leagueId}?${backQuery.toString()}`} className="connect-button">Back to league</Link>
+          <Link href={`/championship/${leagueId}?${backQuery.toString()}`} className="status-chip">Championship odds</Link>
           <Link href="/trades" className="status-chip">Switch league</Link>
         </div>
       </section>
@@ -196,7 +198,14 @@ export default async function TradeLeaguePage({ params, searchParams }: TradePag
         </div>
         {result.board.proposals.length ? (
           <div className="trade-list">
-            {result.board.proposals.slice(0, 12).map((proposal, index) => <TradeCard key={`${proposal.target.playerId}-${proposal.give.map((player) => player.playerId).join("-")}`} proposal={proposal} rank={index + 1} />)}
+            {result.board.proposals.slice(0, 12).map((proposal, index) => {
+              const impactQuery = new URLSearchParams({
+                sleeperUserId,
+                sleeperUsername: sleeperUsername ?? "",
+                boost: proposal.netLineupGain.toFixed(1),
+              });
+              return <TradeCard key={`${proposal.target.playerId}-${proposal.give.map((player) => player.playerId).join("-")}`} proposal={proposal} rank={index + 1} impactHref={`/championship/${leagueId}?${impactQuery.toString()}`} />;
+            })}
           </div>
         ) : (
           <div className="lineup-clear"><strong>DO NOT FORCE A TRADE</strong><span>WAR ROOM found no modeled player-for-player package that both improves your starting lineup and clears its minimum opponent-fit threshold.</span></div>
