@@ -50,7 +50,7 @@ export default async function SavedLeaguesPage() {
   return (
     <div className="page-wrap">
       <section className="hero-panel">
-        <div><p className="eyebrow">PERSISTENT LEAGUE INTELLIGENCE</p><h1>Your saved WAR ROOM leagues.</h1><p className="lede">Saved leagues preserve the manager identity needed to reopen Mission Control and every supporting decision engine without reconnecting the roster.</p></div>
+        <div><p className="eyebrow">PERSISTENT LEAGUE INTELLIGENCE</p><h1>Your saved WAR ROOM leagues.</h1><p className="lede">Saved leagues preserve the manager identity needed to reopen Mission Control, Decision Memory, and every supporting intelligence engine without reconnecting the roster.</p></div>
         <Link href="/connect" className="connect-button">Add another league</Link>
       </section>
       <section className="section-block">
@@ -70,6 +70,7 @@ export default async function SavedLeaguesPage() {
                 </div>
                 <div className="hero-cta">
                   {canPersonalize ? <Link href={featureHref("/command", league.provider_league_id, league.provider_payload)} className="connect-button">Open Mission Control →</Link> : <Link href={featureHref("/league", league.provider_league_id, league.provider_payload)} className="connect-button">Open decision room →</Link>}
+                  {canPersonalize ? <Link href={featureHref("/memory", league.provider_league_id, league.provider_payload)} className="status-chip">Decision History</Link> : null}
                   {canPersonalize ? <Link href={featureHref("/championship", league.provider_league_id, league.provider_payload)} className="status-chip">Championship</Link> : null}
                   {canPersonalize ? <Link href={featureHref("/trades", league.provider_league_id, league.provider_payload)} className="status-chip">Trade Center</Link> : null}
                   {canPersonalize ? <Link href={featureHref("/breakouts", league.provider_league_id, league.provider_payload)} className="status-chip">Breakout Radar</Link> : null}
