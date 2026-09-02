@@ -2,6 +2,8 @@ import { projectPlayer, type PlayerProjection } from "@/lib/analytics/waivers";
 import type { PlayerIdCrosswalk, WeeklyPlayerStat } from "@/lib/nflverse/client";
 import type { SleeperLeagueUser, SleeperMatchup, SleeperPlayer, SleeperRoster } from "@/lib/sleeper/types";
 
+export type ChampionshipScenarioHorizon = "SUSTAINED" | "CURRENT_WEEK";
+
 export type TeamSeasonProfile = {
   rosterId: number;
   managerName: string;
@@ -43,12 +45,13 @@ export type ChampionshipImpact = {
   scenario: ChampionshipSimulation | null;
   userRosterId: number;
   weeklyBoost: number;
+  scenarioHorizon: ChampionshipScenarioHorizon;
   playoffDelta: number | null;
   byeDelta: number | null;
   championshipDelta: number | null;
 };
 
-type BuildChampionshipImpactArgs = {
+export type BuildChampionshipImpactArgs = {
   rosters: SleeperRoster[];
   users: SleeperLeagueUser[];
   players: Record<string, SleeperPlayer>;
@@ -62,6 +65,7 @@ type BuildChampionshipImpactArgs = {
   currentWeek: number;
   userRosterId: number;
   weeklyBoost?: number;
+  scenarioHorizon?: ChampionshipScenarioHorizon;
   iterations?: number;
   seed?: number;
 };
@@ -287,6 +291,23 @@ function sampledScore(profile: TeamSeasonProfile, rng: () => number, boost = 0):
   return Math.max(0, profile.projectedMean + boost + normalRandom(rng) * profile.projectedSd);
 }
 
+function scenarioBoostForWeek(
+  args: BuildChampionshipImpactArgs,
+  rosterId: number,
+  week: number,
+  weeklyBoost: number,
+): number {
+  if (rosterId !== args.userRosterId) return 0;
+  const horizon = args.scenarioHorizon ?? "SUSTAINED";
+  if (horizon === "CURRENT_WEEK" && week !== args.currentWeek) return 0;
+  return weeklyBoost;
+}
+
+function playoffScenarioBoost(args: BuildChampionshipImpactArgs, rosterId: number, weeklyBoost: number): number {
+  if (rosterId !== args.userRosterId) return 0;
+  return (args.scenarioHorizon ?? "SUSTAINED") === "SUSTAINED" ? weeklyBoost : 0;
+}
+
 function sortStandings(standings: SimStanding[]): SimStanding[] {
   return [...standings].sort((a, b) => {
     const aRecord = a.wins + a.ties * 0.5;
@@ -307,11 +328,11 @@ function matchupPairs(matchups: SleeperMatchup[]): Array<[number, number]> {
 }
 
 function simulatePlayoffs(
+  args: BuildChampionshipImpactArgs,
   seeds: SimStanding[],
   profiles: Map<number, TeamSeasonProfile>,
   byeTeams: number,
   rng: () => number,
-  scenarioRosterId: number,
   weeklyBoost: number,
 ): number | null {
   if (seeds.length < 2) return seeds[0]?.rosterId ?? null;
@@ -329,8 +350,8 @@ function simulatePlayoffs(
       const highProfile = profiles.get(high);
       const lowProfile = profiles.get(low);
       if (!highProfile || !lowProfile) continue;
-      const highScore = sampledScore(highProfile, rng, high === scenarioRosterId ? weeklyBoost : 0);
-      const lowScore = sampledScore(lowProfile, rng, low === scenarioRosterId ? weeklyBoost : 0);
+      const highScore = sampledScore(highProfile, rng, playoffScenarioBoost(args, high, weeklyBoost));
+      const lowScore = sampledScore(lowProfile, rng, playoffScenarioBoost(args, low, weeklyBoost));
       winners.push(highScore >= lowScore ? high : low);
     }
     if (sorted.length === 1) winners.push(sorted[0]);
@@ -395,8 +416,8 @@ function simulate(
         const profileA = profileById.get(rosterA);
         const profileB = profileById.get(rosterB);
         if (!standingA || !standingB || !profileA || !profileB) continue;
-        const scoreA = sampledScore(profileA, rng, rosterA === args.userRosterId ? weeklyBoost : 0);
-        const scoreB = sampledScore(profileB, rng, rosterB === args.userRosterId ? weeklyBoost : 0);
+        const scoreA = sampledScore(profileA, rng, scenarioBoostForWeek(args, rosterA, week, weeklyBoost));
+        const scoreB = sampledScore(profileB, rng, scenarioBoostForWeek(args, rosterB, week, weeklyBoost));
         standingA.pointsFor += scoreA;
         standingB.pointsFor += scoreB;
         if (Math.abs(scoreA - scoreB) < 0.05) {
@@ -422,7 +443,7 @@ function simulate(
       if (index < byeTeams) counter.byes += 1;
     }
 
-    const champion = simulatePlayoffs(seeds, profileById, byeTeams, rng, args.userRosterId, weeklyBoost);
+    const champion = simulatePlayoffs(args, seeds, profileById, byeTeams, rng, weeklyBoost);
     if (champion != null) counters.get(champion)!.titles += 1;
   }
 
@@ -453,8 +474,9 @@ function simulate(
 export function buildChampionshipImpact(args: BuildChampionshipImpactArgs): ChampionshipImpact {
   const profiles = buildTeamProfiles(args);
   const weeklyBoost = clamp(Number(args.weeklyBoost ?? 0), -15, 15);
-  const baseline = simulate(args, profiles, 0);
-  const scenario = Math.abs(weeklyBoost) >= 0.05 ? simulate(args, profiles, weeklyBoost) : null;
+  const scenarioHorizon = args.scenarioHorizon ?? "SUSTAINED";
+  const baseline = simulate({ ...args, scenarioHorizon }, profiles, 0);
+  const scenario = Math.abs(weeklyBoost) >= 0.05 ? simulate({ ...args, scenarioHorizon }, profiles, weeklyBoost) : null;
   const baselineUser = baseline.teams.find((team) => team.rosterId === args.userRosterId);
   const scenarioUser = scenario?.teams.find((team) => team.rosterId === args.userRosterId);
 
@@ -463,6 +485,7 @@ export function buildChampionshipImpact(args: BuildChampionshipImpactArgs): Cham
     scenario,
     userRosterId: args.userRosterId,
     weeklyBoost: round(weeklyBoost, 1),
+    scenarioHorizon,
     playoffDelta: baselineUser && scenarioUser ? round(scenarioUser.playoffProbability - baselineUser.playoffProbability, 1) : null,
     byeDelta: baselineUser && scenarioUser ? round(scenarioUser.byeProbability - baselineUser.byeProbability, 1) : null,
     championshipDelta: baselineUser && scenarioUser ? round(scenarioUser.championshipProbability - baselineUser.championshipProbability, 1) : null,
