@@ -34,8 +34,6 @@ type CollectArgs = {
   leagueId: string;
   sleeperUserId: string;
   sleeperUsername: string;
-  remainingRegularWeeks: number;
-  estimatedPlayoffRounds: number;
 };
 
 const confidenceWeight: Record<PriorityCandidate["confidence"], number> = {
@@ -69,10 +67,6 @@ export function collectPriorityCandidates(args: CollectArgs): PriorityCandidate[
 
   for (const swap of (args.lineupPlan?.swaps ?? []).slice(0, 4)) {
     if (swap.projectedGain <= 0) continue;
-    const horizonGames = Math.max(1, args.remainingRegularWeeks + args.estimatedPlayoffRounds);
-    // Championship v1 models sustained boosts. Normalize a one-week lineup gain across the
-    // remaining modeled horizon so a start/sit decision is not accidentally treated as permanent.
-    const equivalentBoost = swap.projectedGain / horizonGames;
     candidates.push({
       id: `lineup:${swap.start.playerId}:${swap.sit.playerId}`,
       type: "LINEUP",
@@ -80,7 +74,7 @@ export function collectPriorityCandidates(args: CollectArgs): PriorityCandidate[
       title: `Start ${swap.start.name} over ${swap.sit.name}`,
       summary: `${swap.slot} change worth +${swap.projectedGain.toFixed(1)} modeled points this week.`,
       weeklyGain: round(swap.projectedGain),
-      simulationBoost: round(equivalentBoost, 3),
+      simulationBoost: round(swap.projectedGain),
       confidence: mapConfidence(swap.confidence),
       urgency: 96,
       href: `/league/${args.leagueId}?${query}`,
