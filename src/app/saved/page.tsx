@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 type ManagerIdentity = {
   sleeperUserId?: string;
   sleeperUsername?: string;
+  espnTeamId?: number;
+  espnOwnerId?: string;
 };
 
 function readManagerIdentity(payload: unknown): ManagerIdentity {
@@ -15,16 +17,25 @@ function readManagerIdentity(payload: unknown): ManagerIdentity {
   return {
     sleeperUserId: typeof identity.sleeper_user_id === "string" ? identity.sleeper_user_id : undefined,
     sleeperUsername: typeof identity.sleeper_username === "string" ? identity.sleeper_username : undefined,
+    espnTeamId: typeof identity.espn_team_id === "number" ? identity.espn_team_id : undefined,
+    espnOwnerId: typeof identity.espn_owner_id === "string" ? identity.espn_owner_id : undefined,
   };
 }
 
-function featureHref(base: string, providerLeagueId: string, payload: unknown): string {
+function sleeperFeatureHref(base: string, providerLeagueId: string, payload: unknown): string {
   const identity = readManagerIdentity(payload);
   const query = new URLSearchParams();
   if (identity.sleeperUserId) query.set("sleeperUserId", identity.sleeperUserId);
   if (identity.sleeperUsername) query.set("sleeperUsername", identity.sleeperUsername);
   const suffix = query.toString();
   return `${base}/${providerLeagueId}${suffix ? `?${suffix}` : ""}`;
+}
+
+function espnHref(providerLeagueId: string, season: number, payload: unknown): string {
+  const identity = readManagerIdentity(payload);
+  const query = new URLSearchParams({ season: String(season) });
+  if (identity.espnTeamId != null) query.set("teamId", String(identity.espnTeamId));
+  return `/espn/${providerLeagueId}?${query.toString()}`;
 }
 
 export default async function SavedLeaguesPage() {
@@ -50,17 +61,18 @@ export default async function SavedLeaguesPage() {
   return (
     <div className="page-wrap">
       <section className="hero-panel">
-        <div><p className="eyebrow">PERSISTENT LEAGUE INTELLIGENCE</p><h1>Your saved WAR ROOM leagues.</h1><p className="lede">Saved leagues preserve the manager identity needed to reopen Mission Control, Decision Memory, and every supporting intelligence engine without reconnecting the roster.</p></div>
+        <div><p className="eyebrow">PERSISTENT LEAGUE INTELLIGENCE</p><h1>Your saved WAR ROOM leagues.</h1><p className="lede">Sleeper and ESPN snapshots share the same WAR ROOM persistence model while provider-specific access remains isolated.</p></div>
         <Link href="/connect" className="connect-button">Add another league</Link>
       </section>
       <section className="section-block">
         <div className="section-heading"><div><p className="eyebrow">CONNECTED LEAGUES</p><h2>{leagues?.length ?? 0} saved</h2></div><span className="status-chip">PRIVATE</span></div>
         {error ? <div className="error-banner">Unable to read saved leagues.</div> : null}
-        {!error && !leagues?.length ? <p className="empty-state">No leagues saved yet. Connect a Sleeper league and choose Save to WAR ROOM.</p> : null}
+        {!error && !leagues?.length ? <p className="empty-state">No leagues saved yet. Connect a Sleeper or ESPN league and choose Save to WAR ROOM.</p> : null}
         <div className="league-list">
           {leagues?.map((league) => {
             const identity = readManagerIdentity(league.provider_payload);
-            const canPersonalize = Boolean(identity.sleeperUserId);
+            const isEspn = league.provider === "espn";
+            const canPersonalizeSleeper = Boolean(identity.sleeperUserId);
             return (
               <article className="league-card" key={league.id}>
                 <div>
@@ -69,11 +81,20 @@ export default async function SavedLeaguesPage() {
                   <p>{league.total_rosters ?? "—"} teams · {league.status ?? "unknown"} · Last synced {league.last_synced_at ? new Date(league.last_synced_at).toLocaleString() : "never"}</p>
                 </div>
                 <div className="hero-cta">
-                  {canPersonalize ? <Link href={featureHref("/command", league.provider_league_id, league.provider_payload)} className="connect-button">Open Mission Control →</Link> : <Link href={featureHref("/league", league.provider_league_id, league.provider_payload)} className="connect-button">Open decision room →</Link>}
-                  {canPersonalize ? <Link href={featureHref("/memory", league.provider_league_id, league.provider_payload)} className="status-chip">Decision History</Link> : null}
-                  {canPersonalize ? <Link href={featureHref("/championship", league.provider_league_id, league.provider_payload)} className="status-chip">Championship</Link> : null}
-                  {canPersonalize ? <Link href={featureHref("/trades", league.provider_league_id, league.provider_payload)} className="status-chip">Trade Center</Link> : null}
-                  {canPersonalize ? <Link href={featureHref("/breakouts", league.provider_league_id, league.provider_payload)} className="status-chip">Breakout Radar</Link> : null}
+                  {isEspn ? (
+                    <>
+                      <Link href={espnHref(league.provider_league_id, league.season, league.provider_payload)} className="connect-button">Open ESPN WAR ROOM →</Link>
+                      <span className="status-chip">ESPN ADAPTER</span>
+                    </>
+                  ) : (
+                    <>
+                      {canPersonalizeSleeper ? <Link href={sleeperFeatureHref("/command", league.provider_league_id, league.provider_payload)} className="connect-button">Open Mission Control →</Link> : <Link href={sleeperFeatureHref("/league", league.provider_league_id, league.provider_payload)} className="connect-button">Open decision room →</Link>}
+                      {canPersonalizeSleeper ? <Link href={sleeperFeatureHref("/memory", league.provider_league_id, league.provider_payload)} className="status-chip">Decision History</Link> : null}
+                      {canPersonalizeSleeper ? <Link href={sleeperFeatureHref("/championship", league.provider_league_id, league.provider_payload)} className="status-chip">Championship</Link> : null}
+                      {canPersonalizeSleeper ? <Link href={sleeperFeatureHref("/trades", league.provider_league_id, league.provider_payload)} className="status-chip">Trade Center</Link> : null}
+                      {canPersonalizeSleeper ? <Link href={sleeperFeatureHref("/breakouts", league.provider_league_id, league.provider_payload)} className="status-chip">Breakout Radar</Link> : null}
+                    </>
+                  )}
                 </div>
               </article>
             );
