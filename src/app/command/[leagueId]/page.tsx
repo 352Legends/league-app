@@ -31,16 +31,6 @@ function rosterPlayers(roster: SleeperRoster): UserRosterPlayer[] {
   }));
 }
 
-function nextPowerOfTwo(value: number): number {
-  let power = 1;
-  while (power < value) power *= 2;
-  return power;
-}
-
-function estimatedPlayoffRounds(playoffTeams: number): number {
-  return Math.max(1, Math.log2(nextPowerOfTwo(Math.max(2, playoffTeams))));
-}
-
 function currentOpponent(matchups: SleeperMatchup[], userRosterId: number): number | null {
   const mine = matchups.find((matchup) => matchup.roster_id === userRosterId);
   if (mine?.matchup_id == null) return null;
@@ -50,7 +40,6 @@ function currentOpponent(matchups: SleeperMatchup[], userRosterId: number): numb
 function winProbability(meanA: number, sdA: number, meanB: number, sdB: number): number {
   const combinedSd = Math.max(1, Math.sqrt(sdA ** 2 + sdB ** 2));
   const z = (meanA - meanB) / combinedSd;
-  // Logistic approximation of the normal CDF; deterministic and sufficient for a dashboard probability signal.
   return Math.max(0.01, Math.min(0.99, 1 / (1 + Math.exp(-1.702 * z)))) * 100;
 }
 
@@ -78,7 +67,7 @@ function PriorityMove({ candidate, rank }: { candidate: PriorityCandidate; rank:
           <div className="command-delta">
             <span>Δ CHAMPIONSHIP</span>
             <strong>{delta(candidate.championshipDelta)}</strong>
-            <small>{candidate.horizon === "ONE_WEEK" ? "one-week impact, horizon-normalized" : "sustained roster impact"}</small>
+            <small>{candidate.horizon === "ONE_WEEK" ? "current-week impact only" : "sustained roster impact"}</small>
           </div>
         </div>
         <div className="command-move-metrics">
@@ -222,7 +211,6 @@ async function loadCommandCenter(leagueId: string, sleeperUserId: string) {
     };
 
     const baselineImpact = buildChampionshipImpact({ ...championshipArgs, weeklyBoost: 0, iterations: 3000 });
-    const playoffRounds = estimatedPlayoffRounds(baselineImpact.baseline.playoffTeams);
     const candidates = collectPriorityCandidates({
       lineupPlan,
       waiverBoard,
@@ -231,14 +219,13 @@ async function loadCommandCenter(leagueId: string, sleeperUserId: string) {
       leagueId,
       sleeperUserId,
       sleeperUsername: users.find((user) => user.user_id === sleeperUserId)?.username ?? "",
-      remainingRegularWeeks: baselineImpact.baseline.scheduledWeeks.length,
-      estimatedPlayoffRounds: playoffRounds,
     });
 
     const simulated = candidates.map((candidate) => {
       const impact = buildChampionshipImpact({
         ...championshipArgs,
         weeklyBoost: candidate.simulationBoost,
+        scenarioHorizon: candidate.horizon === "ONE_WEEK" ? "CURRENT_WEEK" : "SUSTAINED",
         iterations: 1200,
       });
       return attachChampionshipImpact(candidate, impact);
@@ -325,7 +312,7 @@ export default async function CommandLeaguePage({ params, searchParams }: Comman
         </div>
         <div className="command-model-note">
           <strong>DECISION PRIORITY ENGINE v1</strong>
-          <span>Sustained roster changes are simulated as weekly scoring changes. One-week start/sit gains are horizon-normalized before entering Championship Simulation so a single lineup decision is not falsely treated as permanent.</span>
+          <span>WAR ROOM now respects action duration inside the Monte Carlo model: start/sit swaps modify only the current fantasy week, while roster acquisitions and trades remain active through future regular-season and playoff simulations.</span>
         </div>
         {top.length ? <div className="command-priority-list">{top.map((candidate, index) => <PriorityMove key={candidate.id} candidate={candidate} rank={index + 1} />)}</div> : <div className="lineup-clear"><strong>NO QUANTIFIED UPGRADE FOUND</strong><span>WAR ROOM found no current lineup, waiver or trade action with a positive modeled roster gain and sufficient evidence.</span></div>}
       </section>
@@ -363,7 +350,7 @@ export default async function CommandLeaguePage({ params, searchParams }: Comman
         </div>
         <div className="section-block">
           <div className="section-heading"><div><p className="eyebrow">MODEL DISCIPLINE</p><h2>Priority does not mean certainty</h2></div><span className="status-chip">DECISION SUPPORT</span></div>
-          <div className="intel-note"><span>i</span><p>Δ Championship Probability compares modeled season paths, not guaranteed outcomes. Trade acceptance remains uncertain, waiver acquisition is not guaranteed, and one-week lineup impact is horizon-normalized because the current Championship Engine&apos;s scenario input is sustained. WAR ROOM ranks only quantified moves; unquantified hype cannot outrank a simulated improvement.</p></div>
+          <div className="intel-note"><span>i</span><p>Δ Championship Probability compares modeled season paths, not guaranteed outcomes. Trade acceptance remains uncertain and waiver acquisition is not guaranteed. Start/sit recommendations now alter only the current simulated fantasy week; sustained roster moves alter future regular-season and playoff weeks. WAR ROOM ranks only quantified moves, so unquantified hype cannot outrank a simulated improvement.</p></div>
         </div>
       </section>
     </div>
