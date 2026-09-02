@@ -38,7 +38,7 @@ export async function loadPreviousDecisionMemory(providerLeagueId: string): Prom
 
     const { data: topRecommendation } = await supabase
       .from("recommendations")
-      .select("decision_key,title,urgency,priority_score,championship_delta")
+      .select("decision_key,title,urgency,priority_score,championship_delta,evidence")
       .eq("evaluation_id", evaluation.id)
       .order("priority_rank", { ascending: true })
       .limit(1)
@@ -65,6 +65,7 @@ export async function loadPreviousDecisionMemory(providerLeagueId: string): Prom
         urgency: topRecommendation.urgency == null ? null : Number(topRecommendation.urgency),
         priorityScore: topRecommendation.priority_score == null ? null : Number(topRecommendation.priority_score),
         championshipDelta: topRecommendation.championship_delta == null ? null : Number(topRecommendation.championship_delta),
+        reasons: Array.isArray(topRecommendation.evidence) ? topRecommendation.evidence.filter((value): value is string => typeof value === "string") : [],
       } : null,
     };
   } catch {
