@@ -1,5 +1,6 @@
+import { buildMatchupIntelligence, buildTeamMatchupProfiles, type MatchupIntelligence } from "@/lib/analytics/matchup-intelligence";
 import { projectPlayer, type PlayerProjection } from "@/lib/analytics/waivers";
-import type { NflGame, PlayerIdCrosswalk, WeeklyPlayerStat } from "@/lib/nflverse/client";
+import type { AdvancedPassingStat, NflGame, PlayerIdCrosswalk, WeeklyPlayerStat, WeeklyTeamStat } from "@/lib/nflverse/client";
 import type { SleeperPlayer, SleeperRoster } from "@/lib/sleeper/types";
 
 export type LineupPlayer = {
@@ -16,6 +17,10 @@ export type LineupPlayer = {
   matchupMultiplier: number | null;
   environmentMultiplier: number;
   injuryMultiplier: number;
+  schemeMultiplier: number;
+  schemeScore: number;
+  schemeLabel: MatchupIntelligence["label"];
+  schemeContext: MatchupIntelligence;
   matchupLabel: "ELITE" | "PLUS" | "NEUTRAL" | "TOUGH" | "AVOID" | "UNKNOWN";
   confidence: "HIGH" | "MEDIUM" | "LOW" | "INSUFFICIENT";
   gameNote: string;
@@ -50,6 +55,8 @@ type BuildLineupPlanArgs = {
   players: Record<string, SleeperPlayer>;
   crosswalk: Map<string, PlayerIdCrosswalk>;
   historicalStats: Map<string, WeeklyPlayerStat[]>;
+  teamStats: WeeklyTeamStat[];
+  advancedPassing: AdvancedPassingStat[];
   schedule: NflGame[];
   season: number;
   week: number;
@@ -201,6 +208,7 @@ function buildPlayer(
   isCurrentStarter: boolean,
   args: BuildLineupPlanArgs,
   matchupFor: (defense: string | null, position: string) => number | null,
+  teamProfiles: ReturnType<typeof buildTeamMatchupProfiles>,
 ): LineupPlayer | null {
   const player = args.players[playerId];
   const crosswalk = args.crosswalk.get(playerId);
@@ -214,12 +222,13 @@ function buildPlayer(
   const projection = gsisId ? projectPlayer(args.historicalStats.get(gsisId), args.scoring) : null;
   const matchup = matchupFor(opponent, position);
   const environment = environmentMultiplier(game, position);
+  const schemeContext = buildMatchupIntelligence(team, opponent, position, teamProfiles);
   const injury = injuryMultiplier(player);
   const opportunity = projection ? clamp(1 + (projection.opportunityTrend - 50) / 500, 0.95, 1.05) : 1;
   const depth = player?.depth_chart_position ?? player?.depth_chart_order;
   const role = depth === 1 ? 1.02 : depth != null && depth >= 4 ? 0.95 : 1;
   const adjustedProjection = projection
-    ? round(projection.mean * (matchup ?? 1) * environment.multiplier * injury * opportunity * role, 2)
+    ? round(projection.mean * (matchup ?? 1) * environment.multiplier * schemeContext.multiplier * injury * opportunity * role, 2)
     : null;
 
   const reasons: string[] = [];
@@ -228,6 +237,7 @@ function buildPlayer(
     if (matchup >= 1.03) reasons.push(`${opponent} allowed about ${pct}% more ${position} fantasy production than the sampled league baseline.`);
     else if (matchup <= 0.97) reasons.push(`${opponent} allowed about ${pct}% less ${position} fantasy production than the sampled league baseline.`);
   }
+  reasons.push(...schemeContext.reasons.slice(0, 3));
   reasons.push(...environment.reasons);
   if (projection?.opportunityTrend != null) {
     if (projection.opportunityTrend >= 65) reasons.push("Recent targets/carries are running above the sampled baseline.");
@@ -238,7 +248,7 @@ function buildPlayer(
 
   const confidence: LineupPlayer["confidence"] = !projection
     ? "INSUFFICIENT"
-    : projection.sampleSize >= 6 && matchup != null
+    : projection.sampleSize >= 6 && matchup != null && schemeContext.label !== "UNKNOWN"
       ? "HIGH"
       : projection.sampleSize >= 4
         ? "MEDIUM"
@@ -258,6 +268,10 @@ function buildPlayer(
     matchupMultiplier: matchup,
     environmentMultiplier: environment.multiplier,
     injuryMultiplier: injury,
+    schemeMultiplier: schemeContext.multiplier,
+    schemeScore: schemeContext.score,
+    schemeLabel: schemeContext.label,
+    schemeContext,
     matchupLabel: matchupLabel(matchup),
     confidence,
     gameNote: game ? `${venue === "HOME" ? "vs" : "@"} ${opponent} · ${environment.note}` : "No current-week NFL game found",
@@ -267,17 +281,18 @@ function buildPlayer(
 
 export function buildLineupPlan(args: BuildLineupPlanArgs): LineupPlan {
   const matchupFor = defenseMatchups(args.historicalStats, args.scoring);
+  const teamProfiles = buildTeamMatchupProfiles(args.teamStats, args.advancedPassing);
   const starterSlots = args.rosterPositions.filter((slot) => !NON_STARTER_SLOTS.has(slot));
   const starterIds = args.roster.starters ?? [];
   const starterSet = new Set(starterIds);
 
   const starters = starterIds
-    .map((playerId, index) => buildPlayer(playerId, starterSlots[index] ?? null, true, args, matchupFor))
+    .map((playerId, index) => buildPlayer(playerId, starterSlots[index] ?? null, true, args, matchupFor, teamProfiles))
     .filter((player): player is LineupPlayer => Boolean(player));
 
   const bench = (args.roster.players ?? [])
     .filter((playerId) => !starterSet.has(playerId))
-    .map((playerId) => buildPlayer(playerId, null, false, args, matchupFor))
+    .map((playerId) => buildPlayer(playerId, null, false, args, matchupFor, teamProfiles))
     .filter((player): player is LineupPlayer => Boolean(player));
 
   const opportunities: LineupSwap[] = [];
@@ -296,7 +311,7 @@ export function buildLineupPlan(args: BuildLineupPlanArgs): LineupPlan {
           : "MEDIUM";
       const reasons = [
         `${candidate.name} projects ${round(Math.max(gain, 0), 1).toFixed(1)} points above ${starter.name} in the ${starter.slot} slot.`,
-        ...candidate.reasons.slice(0, 2),
+        ...candidate.reasons.slice(0, 3),
       ];
       if (starterUnavailable) reasons.unshift(`${starter.name}'s current status materially lowers his playable projection.`);
       opportunities.push({
