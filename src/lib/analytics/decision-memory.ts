@@ -115,7 +115,10 @@ export function compareDecisionMemory(args: {
 
   const alphaShift = current.alphaOpportunities - previous.alphaOpportunities;
   if (Math.abs(alphaShift) >= 1) {
-    details.push(`${Math.abs(alphaShift)} ${alphaShift > 0 ? "new" : "fewer"} actionable Alpha opportunity${Math.abs(alphaShift) === 1 ? "" : "ies"} ${alphaShift > 0 ? "entered" : "remain in"} the available-player pool.`);
+    const count = Math.abs(alphaShift);
+    details.push(alphaShift > 0
+      ? `${count} new actionable Alpha ${count === 1 ? "opportunity entered" : "opportunities entered"} the available-player pool.`
+      : `${count} actionable Alpha ${count === 1 ? "opportunity left" : "opportunities left"} the available-player pool.`);
   }
 
   const urgentShift = current.urgentDecisions - previous.urgentDecisions;
@@ -126,7 +129,8 @@ export function compareDecisionMemory(args: {
   if (currentTop && previousTop && currentTop.decisionKey === previousTop.decisionKey) {
     const impactShift = (currentTop.championshipDelta ?? 0) - Number(previousTop.championshipDelta ?? 0);
     const urgencyShift = currentTop.urgency - Number(previousTop.urgency ?? currentTop.urgency);
-    if (Math.abs(impactShift) >= 0.5) details.push(`The same #1 move now carries ${signed(impactShift)} more modeled championship impact than before.`);
+    if (impactShift >= 0.5) details.push(`The same #1 move strengthened by ${signed(impactShift)} of modeled championship impact.`);
+    if (impactShift <= -0.5) details.push(`The same #1 move weakened by ${signed(Math.abs(impactShift))} of modeled championship impact.`);
     if (Math.abs(urgencyShift) >= 10) details.push(`Its urgency score moved ${signed(urgencyShift, " points")}, indicating a meaningful timing or market shift.`);
   }
 
