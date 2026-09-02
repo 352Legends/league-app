@@ -5,6 +5,7 @@ import "./scheme.css";
 import "./breakouts.css";
 import "./trades.css";
 import "./championship.css";
+import "./command.css";
 
 export const metadata: Metadata = {
   title: "WAR ROOM · Fantasy Football Championship Intelligence",
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 const nav = [
-  ["Command Center", "/"],
+  ["Command Center", "/command"],
   ["My Team", "/connect"],
   ["This Week", "/connect"],
   ["Waivers", "/connect"],
@@ -28,7 +29,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <div className="app-shell">
           <aside className="sidebar">
-            <Link href="/" className="brand">
+            <Link href="/command" className="brand">
               <span className="brand-mark">W</span>
               <span><strong>WAR ROOM</strong><small>CHAMPIONSHIP INTELLIGENCE</small></span>
             </Link>
@@ -47,7 +48,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <main className="main-shell">
             <header className="topbar">
               <div><span className="topbar-label">2026 NFL SEASON</span><strong>WAR ROOM / LIVE</strong></div>
-              <Link href="/connect" className="connect-button">Connect League</Link>
+              <Link href="/command" className="connect-button">Open Mission Control</Link>
             </header>
             {children}
           </main>
