@@ -23,16 +23,22 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
             <p className="empty-state">No Sleeper NFL leagues were found for the current league season.</p>
           ) : (
             <div className="league-list">
-              {leagues.map((league) => (
-                <article className="league-card" key={league.league_id}>
-                  <div>
-                    <p className="eyebrow">{league.status.toUpperCase()}</p>
-                    <h3>{league.name}</h3>
-                    <p>{league.total_rosters} teams · {league.roster_positions.join(" · ")}</p>
-                  </div>
-                  <Link href={`/league/${league.league_id}`} className="connect-button">Open league →</Link>
-                </article>
-              ))}
+              {leagues.map((league) => {
+                const query = new URLSearchParams({
+                  sleeperUserId: user.user_id,
+                  sleeperUsername: user.username ?? user.display_name ?? value,
+                });
+                return (
+                  <article className="league-card" key={league.league_id}>
+                    <div>
+                      <p className="eyebrow">{league.status.toUpperCase()}</p>
+                      <h3>{league.name}</h3>
+                      <p>{league.total_rosters} teams · {league.roster_positions.join(" · ")}</p>
+                    </div>
+                    <Link href={`/league/${league.league_id}?${query.toString()}`} className="connect-button">Open league →</Link>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>
@@ -51,7 +57,7 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
         <div>
           <p className="eyebrow">LEAGUE CONNECTION</p>
           <h1>Connect the league WAR ROOM will scout.</h1>
-          <p className="lede">Sleeper's read-only API lets WAR ROOM discover your leagues without asking for a fantasy-platform password.</p>
+          <p className="lede">Sleeper's read-only API lets WAR ROOM discover your leagues without asking for a fantasy-platform password. The selected account is also used to identify which roster is yours.</p>
         </div>
         <span className="status-chip">LIVE SLEEPER DATA</span>
       </section>
