@@ -1,6 +1,13 @@
 import Link from "next/link";
+import { DecisionMemorySync } from "@/components/decision-memory-sync";
 import { buildBreakoutRadar } from "@/lib/analytics/breakouts";
 import { buildChampionshipImpact } from "@/lib/analytics/championship";
+import {
+  compareDecisionMemory,
+  DECISION_MEMORY_MODEL_VERSION,
+  toDecisionMemoryPriority,
+} from "@/lib/analytics/decision-memory";
+import { loadPreviousDecisionMemory } from "@/lib/analytics/decision-memory-server";
 import { buildLineupPlan } from "@/lib/analytics/lineups";
 import { attachChampionshipImpact, collectPriorityCandidates, rankPriorities, type PriorityCandidate } from "@/lib/analytics/priorities";
 import { buildTradeBoard } from "@/lib/analytics/trades";
@@ -282,6 +289,20 @@ export default async function CommandLeaguePage({ params, searchParams }: Comman
   const actionableBreakouts = result.breakoutRadar.filter((candidate) => candidate.ownership === "AVAILABLE" && ["ADD NOW", "STASH"].includes(candidate.action));
   const urgent = result.priorities.filter((candidate) => candidate.urgency >= 75).length;
   const queryString = new URLSearchParams({ sleeperUserId, sleeperUsername }).toString();
+  const snapshot = {
+    providerLeagueId: leagueId,
+    season: Number(result.league.season),
+    week: result.state.week,
+    modelVersion: DECISION_MEMORY_MODEL_VERSION,
+    championshipProbability: result.userTeam.championshipProbability,
+    playoffProbability: result.userTeam.playoffProbability,
+    weekWinProbability: result.thisWeekWinProbability,
+    alphaOpportunities: actionableBreakouts.length,
+    urgentDecisions: urgent,
+    priorities: result.priorities.map(toDecisionMemoryPriority),
+  };
+  const memory = await loadPreviousDecisionMemory(leagueId);
+  const memoryChange = compareDecisionMemory({ current: snapshot, previous: memory.previous, previousTop: memory.previousTop });
 
   return (
     <div className="page-wrap">
@@ -305,14 +326,30 @@ export default async function CommandLeaguePage({ params, searchParams }: Comman
         <article className="metric-card"><p className="eyebrow">URGENT DECISIONS</p><strong className="metric-value">{urgent}</strong><p className="metric-detail">Priority actions with urgency ≥75</p></article>
       </section>
 
+      <section className={`section-block gm-memory gm-memory--${memory.active ? memoryChange.kind.toLowerCase().replaceAll("_", "-") : "inactive"}`}>
+        <div className="section-heading">
+          <div><p className="eyebrow">AUTOMATED GM · DECISION MEMORY</p><h2>{memory.active ? memoryChange.headline : "Save this league to activate memory."}</h2></div>
+          <span className="status-chip">{memory.active ? "MEMORY ACTIVE" : "PERSISTENCE OFF"}</span>
+        </div>
+        {memory.active ? (
+          <>
+            <ul className="gm-change-list">{memoryChange.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>
+            {memoryChange.previousGeneratedAt ? <p className="gm-memory-time">Compared with the evaluation saved {new Date(memoryChange.previousGeneratedAt).toLocaleString()}.</p> : null}
+            <DecisionMemorySync payload={snapshot} />
+          </>
+        ) : (
+          <div className="intel-note"><span>↺</span><p>Decision Memory is private to your WAR ROOM account and only activates for saved leagues. Open the decision room, choose <strong>Save to WAR ROOM</strong>, then return to Mission Control. <Link href={`/league/${leagueId}?${queryString}`}><strong>Open decision room →</strong></Link></p></div>
+        )}
+      </section>
+
       <section className="section-block command-priority-section">
         <div className="section-heading">
           <div><p className="eyebrow">WAR ROOM PRIORITIES</p><h2>Ranked by Δ Championship Probability</h2></div>
           <span className="status-chip">LINEUP + WAIVERS + ALPHA + TRADES</span>
         </div>
         <div className="command-model-note">
-          <strong>DECISION PRIORITY ENGINE v1</strong>
-          <span>WAR ROOM now respects action duration inside the Monte Carlo model: start/sit swaps modify only the current fantasy week, while roster acquisitions and trades remain active through future regular-season and playoff simulations.</span>
+          <strong>DECISION PRIORITY ENGINE v2</strong>
+          <span>WAR ROOM respects action duration inside Monte Carlo simulation and now records versioned evaluations, allowing Automated GM to identify when the best move, market urgency, Alpha opportunity count, or probability environment materially changes.</span>
         </div>
         {top.length ? <div className="command-priority-list">{top.map((candidate, index) => <PriorityMove key={candidate.id} candidate={candidate} rank={index + 1} />)}</div> : <div className="lineup-clear"><strong>NO QUANTIFIED UPGRADE FOUND</strong><span>WAR ROOM found no current lineup, waiver or trade action with a positive modeled roster gain and sufficient evidence.</span></div>}
       </section>
@@ -350,7 +387,7 @@ export default async function CommandLeaguePage({ params, searchParams }: Comman
         </div>
         <div className="section-block">
           <div className="section-heading"><div><p className="eyebrow">MODEL DISCIPLINE</p><h2>Priority does not mean certainty</h2></div><span className="status-chip">DECISION SUPPORT</span></div>
-          <div className="intel-note"><span>i</span><p>Δ Championship Probability compares modeled season paths, not guaranteed outcomes. Trade acceptance remains uncertain and waiver acquisition is not guaranteed. Start/sit recommendations now alter only the current simulated fantasy week; sustained roster moves alter future regular-season and playoff weeks. WAR ROOM ranks only quantified moves, so unquantified hype cannot outrank a simulated improvement.</p></div>
+          <div className="intel-note"><span>i</span><p>Δ Championship Probability compares modeled season paths, not guaranteed outcomes. Trade acceptance remains uncertain and waiver acquisition is not guaranteed. Decision Memory records what WAR ROOM knew at each evaluation; it does not rewrite historical advice with hindsight.</p></div>
         </div>
       </section>
     </div>
