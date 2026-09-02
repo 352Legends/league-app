@@ -29,7 +29,7 @@ export default async function BreakoutsPage({ searchParams }: { searchParams: Pr
           <h1>Find the role change before your league sees it.</h1>
           <p className="lede">WAR ROOM compares snap share, targets, carries, target share, depth-chart role and Sleeper market movement to identify emerging fantasy opportunities before season averages catch up.</p>
         </div>
-        <span className="status-chip">USAGE > HYPE</span>
+        <span className="status-chip">USAGE &gt; HYPE</span>
       </section>
 
       <section className="section-block connect-panel">
