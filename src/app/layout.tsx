@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AutomatedGmBanner } from "@/components/automated-gm-banner";
 import "./globals.css";
 import "./scheme.css";
 import "./breakouts.css";
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               <div><span className="topbar-label">2026 NFL SEASON</span><strong>WAR ROOM / LIVE</strong></div>
               <Link href="/command" className="connect-button">Open Mission Control</Link>
             </header>
+            <AutomatedGmBanner />
             {children}
           </main>
         </div>
