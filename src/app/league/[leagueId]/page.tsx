@@ -2,7 +2,7 @@ import Link from "next/link";
 import { buildLineupPlan, type LineupPlan, type LineupSwap } from "@/lib/analytics/lineups";
 import { buildWaiverBoard, type UserRosterPlayer, type WaiverCandidate } from "@/lib/analytics/waivers";
 import { buildTeamSummaries } from "@/lib/league";
-import { loadNflSchedule, loadPlayerIdCrosswalk, loadWeeklyPlayerStats } from "@/lib/nflverse/client";
+import { loadAdvancedPassingStats, loadNflSchedule, loadPlayerIdCrosswalk, loadWeeklyPlayerStats, loadWeeklyTeamStats } from "@/lib/nflverse/client";
 import { sleeper, SleeperApiError } from "@/lib/sleeper/client";
 import type { SleeperRoster } from "@/lib/sleeper/types";
 
@@ -93,6 +93,7 @@ function LineupSwapCard({ swap, rank }: { swap: LineupSwap; rank: number }) {
             <span>START</span>
             <strong>{swap.start.name}</strong>
             <small>{swap.start.position} · {swap.start.team} · {swap.start.gameNote}</small>
+            <div className="swap-context"><i>{swap.start.schemeLabel}</i><em>scheme {swap.start.schemeScore.toFixed(0)}</em></div>
             <b>{swap.start.adjustedProjection?.toFixed(1) ?? "—"}</b>
           </div>
           <div className="swap-arrow">→</div>
@@ -100,6 +101,7 @@ function LineupSwapCard({ swap, rank }: { swap: LineupSwap; rank: number }) {
             <span>SIT</span>
             <strong>{swap.sit.name}</strong>
             <small>{swap.sit.position} · {swap.sit.team} · {swap.sit.gameNote}</small>
+            <div className="swap-context"><i>{swap.sit.schemeLabel}</i><em>scheme {swap.sit.schemeScore.toFixed(0)}</em></div>
             <b>{swap.sit.adjustedProjection?.toFixed(1) ?? "—"}</b>
           </div>
         </div>
@@ -162,6 +164,10 @@ async function loadLeagueData(leagueId: string, sleeperUserId: string | null) {
 
         try {
           const schedule = await loadNflSchedule(Number(league.season));
+          const [teamStats, advancedPassing] = await Promise.all([
+            loadWeeklyTeamStats(analyticsSeason).catch(() => []),
+            loadAdvancedPassingStats(analyticsSeason).catch(() => []),
+          ]);
           lineupPlan = buildLineupPlan({
             roster: userRoster,
             rosterPositions: league.roster_positions,
@@ -169,6 +175,8 @@ async function loadLeagueData(leagueId: string, sleeperUserId: string | null) {
             players,
             crosswalk,
             historicalStats,
+            teamStats,
+            advancedPassing,
             schedule,
             season: Number(league.season),
             week: state.week,
@@ -253,7 +261,7 @@ export default async function LeaguePage({ params, searchParams }: LeaguePagePro
             <p className="eyebrow">DECISION ENGINE · START / SIT</p>
             <h2>Weekly lineup command center</h2>
           </div>
-          <span className="status-chip">MATCHUP + WEATHER + VEGAS + ROLE</span>
+          <span className="status-chip">SCHEME + PRESSURE + MATCHUP + WEATHER + VEGAS</span>
         </div>
 
         {!sleeperUserId || !userRoster ? (
@@ -274,7 +282,7 @@ export default async function LeaguePage({ params, searchParams }: LeaguePagePro
 
             <div className="model-note">
               <strong>WEEK {lineupPlan.week} MODEL</strong>
-              <span>{lineupPlan.evidenceSeason} NFL production re-scored to this league · opponent positional allowance · current NFL schedule · Vegas total · roof, wind and temperature · depth chart · injury designation · recent opportunity</span>
+              <span>{lineupPlan.evidenceSeason} NFL production re-scored to this league · positional allowance · team pass/run identity · play volume · pass/rush EPA allowed · sack protection · defensive pressure/blitz profile · current schedule · Vegas total · weather · depth chart · injury · recent opportunity</span>
             </div>
 
             {lineupPlan.swaps.length ? (
@@ -290,19 +298,35 @@ export default async function LeaguePage({ params, searchParams }: LeaguePagePro
               <span>{lineupPlan.supportedStarterSlots} modeled QB/RB/WR/TE slots</span>
             </div>
             <div className="starter-matchup-grid">
-              {lineupPlan.starters.map((player) => (
-                <article className="starter-matchup-card" key={`${player.slot}-${player.playerId}`}>
-                  <div className="starter-card-top">
-                    <span>{player.slot}</span>
-                    <b className={`matchup-tag matchup-tag--${player.matchupLabel.toLowerCase()}`}>{player.matchupLabel}</b>
-                  </div>
-                  <h3>{player.name}</h3>
-                  <p>{player.position} · {player.team}</p>
-                  <strong>{player.adjustedProjection?.toFixed(1) ?? "—"}</strong>
-                  <small>{player.gameNote}</small>
-                  <em>{player.confidence} confidence</em>
-                </article>
-              ))}
+              {lineupPlan.starters.map((player) => {
+                const offense = player.schemeContext.offense;
+                const defense = player.schemeContext.defense;
+                const defenseEase = player.position === "RB" ? defense?.rushDefenseEasePercentile : defense?.passDefenseEasePercentile;
+                return (
+                  <article className="starter-matchup-card" key={`${player.slot}-${player.playerId}`}>
+                    <div className="starter-card-top">
+                      <span>{player.slot}</span>
+                      <div className="starter-tags">
+                        <b className={`matchup-tag matchup-tag--${player.matchupLabel.toLowerCase()}`}>{player.matchupLabel}</b>
+                        <b className={`scheme-tag scheme-tag--${player.schemeLabel.toLowerCase().replaceAll(" ", "-")}`}>{player.schemeLabel} {player.schemeScore.toFixed(0)}</b>
+                      </div>
+                    </div>
+                    <h3>{player.name}</h3>
+                    <p>{player.position} · {player.team}</p>
+                    <strong>{player.adjustedProjection?.toFixed(1) ?? "—"}</strong>
+                    <small>{player.gameNote}</small>
+                    {offense && defense && (
+                      <div className="scheme-grid">
+                        <span><i>PASS RATE</i><b>{Math.round(offense.passRate * 100)}%</b></span>
+                        <span><i>PLAYS/G</i><b>{offense.playsPerGame.toFixed(1)}</b></span>
+                        <span><i>D EASE</i><b>{defenseEase?.toFixed(0) ?? "—"}</b></span>
+                        <span><i>PRESSURE</i><b>{defense.pressureRate == null ? "—" : `${(defense.pressureRate * 100).toFixed(1)}%`}</b></span>
+                      </div>
+                    )}
+                    <em>{player.confidence} confidence</em>
+                  </article>
+                );
+              })}
             </div>
           </>
         ) : null}
