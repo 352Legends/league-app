@@ -14,7 +14,7 @@ const nav = [
   ["This Week", "/connect"],
   ["Waivers", "/connect"],
   ["Trades", "/connect"],
-  ["Breakout Radar", "/connect"],
+  ["Breakout Radar", "/breakouts"],
   ["Chess Mode", "/connect"],
 ];
 
@@ -37,7 +37,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </nav>
             <div className="sidebar-footer">
               <span className="pulse" />
-              <div><strong>Data engine</strong><small>Sleeper connector ready</small></div>
+              <div><strong>Data engine</strong><small>Sleeper + nflverse live</small></div>
             </div>
           </aside>
           <main className="main-shell">
