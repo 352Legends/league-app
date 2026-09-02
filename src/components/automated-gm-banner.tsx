@@ -30,10 +30,7 @@ export function AutomatedGmBanner() {
   const [data, setData] = useState<AlertResponse | null>(null);
 
   useEffect(() => {
-    if (!leagueId) {
-      setData(null);
-      return;
-    }
+    if (!leagueId) return;
     const controller = new AbortController();
     fetch(`/api/monitoring/alerts?providerLeagueId=${encodeURIComponent(leagueId)}`, { signal: controller.signal })
       .then((response) => response.ok ? response.json() as Promise<AlertResponse> : null)
