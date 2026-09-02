@@ -3,6 +3,7 @@ import { csvNumber, parseCsv, type CsvRow } from "@/lib/csv";
 const PLAYER_IDS_URL = "https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_playerids.csv";
 const STATS_URL = (season: number) =>
   `https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_${season}.csv`;
+const SCHEDULE_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv";
 
 export type PlayerIdCrosswalk = {
   sleeperId: string;
@@ -42,9 +43,24 @@ export type WeeklyPlayerStat = {
   fumblesLost: number;
 };
 
+export type NflGame = {
+  season: number;
+  week: number;
+  gameType: string;
+  awayTeam: string;
+  homeTeam: string;
+  gameday: string;
+  gametime: string;
+  roof: string;
+  temp: number | null;
+  wind: number | null;
+  totalLine: number | null;
+  spreadLine: number | null;
+};
+
 async function fetchText(url: string, revalidate: number): Promise<string> {
   const response = await fetch(url, {
-    headers: { Accept: "text/csv", "User-Agent": "WAR-ROOM/0.2" },
+    headers: { Accept: "text/csv", "User-Agent": "WAR-ROOM/0.3" },
     next: { revalidate },
   });
   if (!response.ok) throw new Error(`Analytics source request failed (${response.status})`);
@@ -130,4 +146,25 @@ export async function loadWeeklyPlayerStats(season: number): Promise<Map<string,
 
   for (const stats of byPlayer.values()) stats.sort((a, b) => a.week - b.week);
   return byPlayer;
+}
+
+export async function loadNflSchedule(season: number): Promise<NflGame[]> {
+  const rows = parseCsv(await fetchText(SCHEDULE_URL, 300));
+  return rows
+    .filter((row) => csvNumber(row, "season") === season && (row.game_type || "REG") === "REG")
+    .map((row) => ({
+      season,
+      week: csvNumber(row, "week"),
+      gameType: row.game_type || "REG",
+      awayTeam: row.away_team || "",
+      homeTeam: row.home_team || "",
+      gameday: row.gameday || "",
+      gametime: row.gametime || "",
+      roof: row.roof || "",
+      temp: nullableNumber(row.temp),
+      wind: nullableNumber(row.wind),
+      totalLine: nullableNumber(row.total_line),
+      spreadLine: nullableNumber(row.spread_line),
+    }))
+    .filter((game) => Boolean(game.awayTeam && game.homeTeam));
 }
