@@ -89,12 +89,12 @@ export function projectPlayer(stats: WeeklyPlayerStat[] | undefined, scoring: Re
 
   const chronological = [...games].reverse();
   const recent = chronological.slice(-4);
-  const seasonTargets = average(chronological.map((game) => game.stat.targets));
-  const seasonCarries = average(chronological.map((game) => game.stat.carries));
-  const recentTargets = average(recent.map((game) => game.stat.targets));
-  const recentCarries = average(recent.map((game) => game.stat.carries));
-  const seasonTargetShare = average(chronological.map((game) => game.stat.targetShare).filter((value) => value > 0));
-  const recentTargetShare = average(recent.map((game) => game.stat.targetShare).filter((value) => value > 0));
+  const seasonTargets = average(chronological.map((game) => game.targets));
+  const seasonCarries = average(chronological.map((game) => game.carries));
+  const recentTargets = average(recent.map((game) => game.targets));
+  const recentCarries = average(recent.map((game) => game.carries));
+  const seasonTargetShare = average(chronological.map((game) => game.targetShare).filter((value) => value > 0));
+  const recentTargetShare = average(recent.map((game) => game.targetShare).filter((value) => value > 0));
   const targetShareTrend = recentTargetShare - seasonTargetShare;
   const opportunityDelta = (recentTargets + recentCarries) - (seasonTargets + seasonCarries);
   const opportunityTrend = clamp(50 + targetShareTrend * 180 + opportunityDelta * 3);
