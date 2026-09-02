@@ -7,11 +7,14 @@ const TEAM_STATS_URL = (season: number) =>
   `https://github.com/nflverse/nflverse-data/releases/download/stats_team/stats_team_week_${season}.csv`;
 const PFR_PASS_URL = (season: number) =>
   `https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_week_pass_${season}.csv`;
+const SNAP_COUNTS_URL = (season: number) =>
+  `https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_${season}.csv`;
 const SCHEDULE_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv";
 
 export type PlayerIdCrosswalk = {
   sleeperId: string;
   gsisId: string;
+  pfrId: string | null;
   name: string;
   position: string;
   team: string;
@@ -77,6 +80,18 @@ export type AdvancedPassingStat = {
   timesPressuredPct: number;
 };
 
+export type SnapCountStat = {
+  season: number;
+  week: number;
+  player: string;
+  pfrPlayerId: string;
+  position: string;
+  team: string;
+  opponent: string;
+  offenseSnaps: number;
+  offensePct: number;
+};
+
 export type NflGame = {
   season: number;
   week: number;
@@ -94,7 +109,7 @@ export type NflGame = {
 
 async function fetchText(url: string, revalidate: number): Promise<string> {
   const response = await fetch(url, {
-    headers: { Accept: "text/csv", "User-Agent": "WAR-ROOM/0.4" },
+    headers: { Accept: "text/csv", "User-Agent": "WAR-ROOM/0.5" },
     next: { revalidate },
   });
   if (!response.ok) throw new Error(`Analytics source request failed (${response.status})`);
@@ -107,6 +122,11 @@ function nullableNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizedShare(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return value > 1.5 ? value / 100 : value;
+}
+
 export async function loadPlayerIdCrosswalk(): Promise<Map<string, PlayerIdCrosswalk>> {
   const rows = parseCsv(await fetchText(PLAYER_IDS_URL, 86400));
   const bySleeper = new Map<string, PlayerIdCrosswalk>();
@@ -117,6 +137,7 @@ export async function loadPlayerIdCrosswalk(): Promise<Map<string, PlayerIdCross
     bySleeper.set(sleeperId, {
       sleeperId,
       gsisId,
+      pfrId: row.pfr_id && row.pfr_id !== "NA" ? row.pfr_id : null,
       name: row.name || "Unknown player",
       position: row.position || "",
       team: row.team || "",
@@ -180,6 +201,33 @@ export async function loadWeeklyPlayerStats(season: number): Promise<Map<string,
 
   for (const stats of byPlayer.values()) stats.sort((a, b) => a.week - b.week);
   return byPlayer;
+}
+
+export async function loadSnapCounts(season: number): Promise<Map<string, SnapCountStat[]>> {
+  const rows = parseCsv(await fetchText(SNAP_COUNTS_URL(season), 21600));
+  const byPfr = new Map<string, SnapCountStat[]>();
+  for (const row of rows) {
+    if ((row.game_type || "REG") !== "REG") continue;
+    const pfrPlayerId = row.pfr_player_id;
+    const position = row.position;
+    if (!pfrPlayerId || !["QB", "RB", "WR", "TE"].includes(position)) continue;
+    const stat: SnapCountStat = {
+      season: csvNumber(row, "season"),
+      week: csvNumber(row, "week"),
+      player: row.player || pfrPlayerId,
+      pfrPlayerId,
+      position,
+      team: row.team || "",
+      opponent: row.opponent || "",
+      offenseSnaps: csvNumber(row, "offense_snaps"),
+      offensePct: normalizedShare(csvNumber(row, "offense_pct")),
+    };
+    const list = byPfr.get(pfrPlayerId) ?? [];
+    list.push(stat);
+    byPfr.set(pfrPlayerId, list);
+  }
+  for (const snaps of byPfr.values()) snaps.sort((a, b) => a.week - b.week);
+  return byPfr;
 }
 
 export async function loadWeeklyTeamStats(season: number): Promise<WeeklyTeamStat[]> {
