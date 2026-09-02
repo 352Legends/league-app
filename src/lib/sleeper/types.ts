@@ -71,7 +71,14 @@ export type SleeperPlayer = {
   status?: string | null;
   injury_status?: string | null;
   depth_chart_position?: number | null;
+  depth_chart_order?: number | null;
   number?: number | null;
+  search_rank?: number | null;
+};
+
+export type SleeperTrendingPlayer = {
+  player_id: string;
+  count: number;
 };
 
 export type SleeperNflState = {
