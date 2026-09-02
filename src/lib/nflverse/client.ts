@@ -3,6 +3,10 @@ import { csvNumber, parseCsv, type CsvRow } from "@/lib/csv";
 const PLAYER_IDS_URL = "https://raw.githubusercontent.com/dynastyprocess/data/master/files/db_playerids.csv";
 const STATS_URL = (season: number) =>
   `https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_week_${season}.csv`;
+const TEAM_STATS_URL = (season: number) =>
+  `https://github.com/nflverse/nflverse-data/releases/download/stats_team/stats_team_week_${season}.csv`;
+const PFR_PASS_URL = (season: number) =>
+  `https://github.com/nflverse/nflverse-data/releases/download/pfr_advstats/advstats_week_pass_${season}.csv`;
 const SCHEDULE_URL = "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv";
 
 export type PlayerIdCrosswalk = {
@@ -43,6 +47,36 @@ export type WeeklyPlayerStat = {
   fumblesLost: number;
 };
 
+export type WeeklyTeamStat = {
+  season: number;
+  week: number;
+  team: string;
+  opponent: string;
+  attempts: number;
+  carries: number;
+  completions: number;
+  passingYards: number;
+  rushingYards: number;
+  passingTds: number;
+  rushingTds: number;
+  sacksSuffered: number;
+  passingEpa: number;
+  rushingEpa: number;
+};
+
+export type AdvancedPassingStat = {
+  season: number;
+  week: number;
+  team: string;
+  opponent: string;
+  timesSacked: number;
+  timesBlitzed: number;
+  timesHurried: number;
+  timesHit: number;
+  timesPressured: number;
+  timesPressuredPct: number;
+};
+
 export type NflGame = {
   season: number;
   week: number;
@@ -60,7 +94,7 @@ export type NflGame = {
 
 async function fetchText(url: string, revalidate: number): Promise<string> {
   const response = await fetch(url, {
-    headers: { Accept: "text/csv", "User-Agent": "WAR-ROOM/0.3" },
+    headers: { Accept: "text/csv", "User-Agent": "WAR-ROOM/0.4" },
     next: { revalidate },
   });
   if (!response.ok) throw new Error(`Analytics source request failed (${response.status})`);
@@ -146,6 +180,46 @@ export async function loadWeeklyPlayerStats(season: number): Promise<Map<string,
 
   for (const stats of byPlayer.values()) stats.sort((a, b) => a.week - b.week);
   return byPlayer;
+}
+
+export async function loadWeeklyTeamStats(season: number): Promise<WeeklyTeamStat[]> {
+  const rows = parseCsv(await fetchText(TEAM_STATS_URL(season), 86400));
+  return rows
+    .filter((row) => (row.season_type || "REG") === "REG" && Boolean(row.team && row.opponent_team))
+    .map((row) => ({
+      season: csvNumber(row, "season"),
+      week: csvNumber(row, "week"),
+      team: row.team,
+      opponent: row.opponent_team,
+      attempts: csvNumber(row, "attempts"),
+      carries: csvNumber(row, "carries"),
+      completions: csvNumber(row, "completions"),
+      passingYards: csvNumber(row, "passing_yards"),
+      rushingYards: csvNumber(row, "rushing_yards"),
+      passingTds: csvNumber(row, "passing_tds"),
+      rushingTds: csvNumber(row, "rushing_tds"),
+      sacksSuffered: csvNumber(row, "sacks_suffered"),
+      passingEpa: csvNumber(row, "passing_epa"),
+      rushingEpa: csvNumber(row, "rushing_epa"),
+    }));
+}
+
+export async function loadAdvancedPassingStats(season: number): Promise<AdvancedPassingStat[]> {
+  const rows = parseCsv(await fetchText(PFR_PASS_URL(season), 86400));
+  return rows
+    .filter((row) => (row.game_type || "REG") === "REG" && Boolean(row.team && row.opponent))
+    .map((row) => ({
+      season: csvNumber(row, "season"),
+      week: csvNumber(row, "week"),
+      team: row.team,
+      opponent: row.opponent,
+      timesSacked: csvNumber(row, "times_sacked"),
+      timesBlitzed: csvNumber(row, "times_blitzed"),
+      timesHurried: csvNumber(row, "times_hurried"),
+      timesHit: csvNumber(row, "times_hit"),
+      timesPressured: csvNumber(row, "times_pressured"),
+      timesPressuredPct: csvNumber(row, "times_pressured_pct"),
+    }));
 }
 
 export async function loadNflSchedule(season: number): Promise<NflGame[]> {
