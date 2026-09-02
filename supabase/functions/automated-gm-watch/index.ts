@@ -32,6 +32,12 @@ function adminClient() {
   return createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+async function sha256(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 async function sleeperJson(path: string) {
   const response = await fetch(`${SLEEPER}${path}`, {
     headers: { Accept: "application/json", "User-Agent": "WAR-ROOM-Automated-GM/1.0" },
@@ -76,12 +82,23 @@ function transactionIds(rows: unknown): string[] {
   return rows.map((row) => asObject(row).transaction_id).filter((id): id is string => typeof id === "string").sort();
 }
 
-Deno.serve(async () => {
+Deno.serve(async (req: Request) => {
   const supabase = adminClient();
   const now = new Date();
 
-  const { data: runtime } = await supabase.from("monitoring_runtime").select("last_started_at").eq("singleton", true).maybeSingle();
-  if (runtime?.last_started_at && now.getTime() - new Date(runtime.last_started_at).getTime() < 20 * 60 * 1000) {
+  const { data: runtime, error: runtimeError } = await supabase
+    .from("monitoring_runtime")
+    .select("last_started_at,auth_secret_hash")
+    .eq("singleton", true)
+    .maybeSingle();
+  if (runtimeError) return new Response(JSON.stringify({ ok: false, error: "monitoring runtime unavailable" }), { status: 500, headers: JSON_HEADERS });
+
+  const suppliedSecret = req.headers.get("x-war-room-monitor-key") ?? "";
+  if (!runtime?.auth_secret_hash || !suppliedSecret || await sha256(suppliedSecret) !== runtime.auth_secret_hash) {
+    return new Response(JSON.stringify({ ok: false, error: "unauthorized monitoring invocation" }), { status: 401, headers: JSON_HEADERS });
+  }
+
+  if (runtime.last_started_at && now.getTime() - new Date(runtime.last_started_at).getTime() < 20 * 60 * 1000) {
     return new Response(JSON.stringify({ ok: true, skipped: "rate_gate" }), { headers: JSON_HEADERS });
   }
 
