@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { buildLineupPlan, type LineupPlan, type LineupSwap } from "@/lib/analytics/lineups";
 import { buildWaiverBoard, type UserRosterPlayer, type WaiverCandidate } from "@/lib/analytics/waivers";
 import { buildTeamSummaries } from "@/lib/league";
-import { loadPlayerIdCrosswalk, loadWeeklyPlayerStats } from "@/lib/nflverse/client";
+import { loadNflSchedule, loadPlayerIdCrosswalk, loadWeeklyPlayerStats } from "@/lib/nflverse/client";
 import { sleeper, SleeperApiError } from "@/lib/sleeper/client";
 import type { SleeperRoster } from "@/lib/sleeper/types";
 
@@ -75,6 +76,41 @@ function WaiverCard({ candidate, rank }: { candidate: WaiverCandidate; rank: num
   );
 }
 
+function LineupSwapCard({ swap, rank }: { swap: LineupSwap; rank: number }) {
+  return (
+    <article className="swap-card">
+      <div className="swap-rank">#{rank}</div>
+      <div className="swap-main">
+        <div className="swap-header">
+          <div>
+            <p className="eyebrow">{swap.slot} · {swap.confidence} CONFIDENCE</p>
+            <h3>Start {swap.start.name}</h3>
+          </div>
+          <div className="gain-pill">+{swap.projectedGain.toFixed(1)} PTS</div>
+        </div>
+        <div className="swap-versus">
+          <div className="swap-player swap-player--start">
+            <span>START</span>
+            <strong>{swap.start.name}</strong>
+            <small>{swap.start.position} · {swap.start.team} · {swap.start.gameNote}</small>
+            <b>{swap.start.adjustedProjection?.toFixed(1) ?? "—"}</b>
+          </div>
+          <div className="swap-arrow">→</div>
+          <div className="swap-player swap-player--sit">
+            <span>SIT</span>
+            <strong>{swap.sit.name}</strong>
+            <small>{swap.sit.position} · {swap.sit.team} · {swap.sit.gameNote}</small>
+            <b>{swap.sit.adjustedProjection?.toFixed(1) ?? "—"}</b>
+          </div>
+        </div>
+        <ul className="reason-list">
+          {swap.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+        </ul>
+      </div>
+    </article>
+  );
+}
+
 async function loadLeagueData(leagueId: string, sleeperUserId: string | null) {
   try {
     const [league, users, rosters, state, drafts, players] = await Promise.all([
@@ -93,30 +129,58 @@ async function loadLeagueData(leagueId: string, sleeperUserId: string | null) {
 
     let waiverBoard: WaiverCandidate[] = [];
     let waiverError: string | null = null;
+    let lineupPlan: LineupPlan | null = null;
+    let lineupError: string | null = null;
 
     if (userRoster) {
       try {
-        const [crosswalk, historicalStats, trendingAdds, trendingDrops] = await Promise.all([
+        const [crosswalk, historicalStats] = await Promise.all([
           loadPlayerIdCrosswalk(),
           loadWeeklyPlayerStats(analyticsSeason),
-          sleeper.getTrending("add", 24, 100),
-          sleeper.getTrending("drop", 24, 100),
         ]);
 
-        waiverBoard = buildWaiverBoard({
-          leagueSize: league.total_rosters,
-          scoring: league.scoring_settings,
-          players,
-          rosteredPlayerIds,
-          userRoster: rosterPlayers(userRoster),
-          crosswalk,
-          historicalStats,
-          trendingAdds,
-          trendingDrops,
-          currentSeason: Number(league.season),
-        });
+        try {
+          const [trendingAdds, trendingDrops] = await Promise.all([
+            sleeper.getTrending("add", 24, 100),
+            sleeper.getTrending("drop", 24, 100),
+          ]);
+          waiverBoard = buildWaiverBoard({
+            leagueSize: league.total_rosters,
+            scoring: league.scoring_settings,
+            players,
+            rosteredPlayerIds,
+            userRoster: rosterPlayers(userRoster),
+            crosswalk,
+            historicalStats,
+            trendingAdds,
+            trendingDrops,
+            currentSeason: Number(league.season),
+          });
+        } catch (error) {
+          waiverError = error instanceof Error ? error.message : "Waiver market sources are temporarily unavailable.";
+        }
+
+        try {
+          const schedule = await loadNflSchedule(Number(league.season));
+          lineupPlan = buildLineupPlan({
+            roster: userRoster,
+            rosterPositions: league.roster_positions,
+            scoring: league.scoring_settings,
+            players,
+            crosswalk,
+            historicalStats,
+            schedule,
+            season: Number(league.season),
+            week: state.week,
+            evidenceSeason: analyticsSeason,
+          });
+        } catch (error) {
+          lineupError = error instanceof Error ? error.message : "Weekly matchup sources are temporarily unavailable.";
+        }
       } catch (error) {
-        waiverError = error instanceof Error ? error.message : "Analytics sources are temporarily unavailable.";
+        const message = error instanceof Error ? error.message : "Analytics sources are temporarily unavailable.";
+        waiverError = message;
+        lineupError = message;
       }
     }
 
@@ -130,6 +194,8 @@ async function loadLeagueData(leagueId: string, sleeperUserId: string | null) {
       analyticsSeason,
       waiverBoard,
       waiverError,
+      lineupPlan,
+      lineupError,
     };
   } catch (error) {
     const detail = error instanceof SleeperApiError ? `Sleeper returned ${error.status}.` : "An unexpected provider error occurred.";
@@ -152,7 +218,7 @@ export default async function LeaguePage({ params, searchParams }: LeaguePagePro
     );
   }
 
-  const { league, state, drafts, teams, userRoster, analyticsSeason, waiverBoard, waiverError } = result;
+  const { league, state, drafts, teams, userRoster, analyticsSeason, waiverBoard, waiverError, lineupPlan, lineupError } = result;
 
   return (
     <div className="page-wrap">
@@ -178,7 +244,68 @@ export default async function LeaguePage({ params, searchParams }: LeaguePagePro
         <article className="metric-card"><p className="eyebrow">TEAMS</p><strong className="metric-value">{teams.length}</strong><p className="metric-detail">Imported from Sleeper</p></article>
         <article className="metric-card"><p className="eyebrow">CURRENT WEEK</p><strong className="metric-value">{state.week}</strong><p className="metric-detail">Sleeper NFL state</p></article>
         <article className="metric-card metric-card--positive"><p className="eyebrow">LEAGUE STATUS</p><strong className="metric-value" style={{ fontSize: 24 }}>{league.status.toUpperCase()}</strong><p className="metric-detail">Live provider state</p></article>
-        <article className="metric-card"><p className="eyebrow">YOUR ROSTER</p><strong className="metric-value" style={{ fontSize: 24 }}>{userRoster ? "IDENTIFIED" : "NOT LINKED"}</strong><p className="metric-detail">{userRoster ? `${sleeperUsername ?? "Sleeper manager"} · roster ${userRoster.roster_id}` : "Reconnect through your Sleeper username to unlock add/drop math."}</p></article>
+        <article className="metric-card"><p className="eyebrow">YOUR ROSTER</p><strong className="metric-value" style={{ fontSize: 24 }}>{userRoster ? "IDENTIFIED" : "NOT LINKED"}</strong><p className="metric-detail">{userRoster ? `${sleeperUsername ?? "Sleeper manager"} · roster ${userRoster.roster_id}` : "Reconnect through your Sleeper username to unlock personalized decisions."}</p></article>
+      </section>
+
+      <section className="section-block lineup-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">DECISION ENGINE · START / SIT</p>
+            <h2>Weekly lineup command center</h2>
+          </div>
+          <span className="status-chip">MATCHUP + WEATHER + VEGAS + ROLE</span>
+        </div>
+
+        {!sleeperUserId || !userRoster ? (
+          <div className="intel-note">
+            <span>!</span>
+            <p>Reconnect through your Sleeper username so WAR ROOM can identify your starters and bench before recommending lineup changes. <Link href="/connect"><strong>Connect roster →</strong></Link></p>
+          </div>
+        ) : lineupError ? (
+          <div className="error-banner">Your roster is connected, but weekly matchup intelligence could not be refreshed: {lineupError} WAR ROOM will not invent a start/sit recommendation.</div>
+        ) : lineupPlan ? (
+          <>
+            <div className="lineup-summary-grid">
+              <div><span>CURRENT MODELED</span><strong>{lineupPlan.currentProjectedPoints.toFixed(1)}</strong><small>supported starter points</small></div>
+              <div><span>OPTIMIZED</span><strong>{lineupPlan.optimizedProjectedPoints.toFixed(1)}</strong><small>after evidence-backed swaps</small></div>
+              <div className="lineup-gain"><span>PROJECTED GAIN</span><strong>+{lineupPlan.projectedGain.toFixed(1)}</strong><small>points available this week</small></div>
+              <div><span>CHANGES</span><strong>{lineupPlan.swaps.length}</strong><small>recommended lineup moves</small></div>
+            </div>
+
+            <div className="model-note">
+              <strong>WEEK {lineupPlan.week} MODEL</strong>
+              <span>{lineupPlan.evidenceSeason} NFL production re-scored to this league · opponent positional allowance · current NFL schedule · Vegas total · roof, wind and temperature · depth chart · injury designation · recent opportunity</span>
+            </div>
+
+            {lineupPlan.swaps.length ? (
+              <div className="swap-list">
+                {lineupPlan.swaps.map((swap, index) => <LineupSwapCard key={`${swap.start.playerId}-${swap.sit.playerId}`} swap={swap} rank={index + 1} />)}
+              </div>
+            ) : (
+              <div className="lineup-clear"><strong>HOLD YOUR CURRENT LINEUP</strong><span>WAR ROOM found no evidence-backed bench swap worth at least one projected point with sufficient data.</span></div>
+            )}
+
+            <div className="starter-board-heading">
+              <p className="eyebrow">CURRENT STARTER MATCHUPS</p>
+              <span>{lineupPlan.supportedStarterSlots} modeled QB/RB/WR/TE slots</span>
+            </div>
+            <div className="starter-matchup-grid">
+              {lineupPlan.starters.map((player) => (
+                <article className="starter-matchup-card" key={`${player.slot}-${player.playerId}`}>
+                  <div className="starter-card-top">
+                    <span>{player.slot}</span>
+                    <b className={`matchup-tag matchup-tag--${player.matchupLabel.toLowerCase()}`}>{player.matchupLabel}</b>
+                  </div>
+                  <h3>{player.name}</h3>
+                  <p>{player.position} · {player.team}</p>
+                  <strong>{player.adjustedProjection?.toFixed(1) ?? "—"}</strong>
+                  <small>{player.gameNote}</small>
+                  <em>{player.confidence} confidence</em>
+                </article>
+              ))}
+            </div>
+          </>
+        ) : null}
       </section>
 
       <section className="section-block waiver-section">
