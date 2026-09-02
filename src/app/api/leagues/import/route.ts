@@ -51,6 +51,23 @@ export async function POST(request: Request) {
     if (leagueError) throw leagueError;
 
     const leagueUuid = savedLeague.id;
+
+    // Every saved league gets an Automated GM watch policy once. Existing user settings are
+    // never overwritten by a later league refresh.
+    const { error: monitoringError } = await supabase.from("monitoring_subscriptions").insert({
+      league_id: leagueUuid,
+      user_id: authData.user.id,
+      enabled: true,
+      cadence_minutes: 30,
+      market_add_threshold: 150,
+      watch_roster_changes: true,
+      watch_transactions: true,
+      watch_market_acceleration: true,
+      watch_week_advance: true,
+      next_run_at: new Date().toISOString(),
+    });
+    if (monitoringError && monitoringError.code !== "23505") throw monitoringError;
+
     const teamRows = teams.map((team) => {
       const raw = rosters.find((roster) => roster.roster_id === team.rosterId)!;
       return {
