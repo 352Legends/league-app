@@ -10,6 +10,17 @@ function when(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString() : "Not yet";
 }
 
+function managerQuery(payload: unknown) {
+  if (!payload || typeof payload !== "object") return "";
+  const warRoom = (payload as Record<string, unknown>).war_room;
+  if (!warRoom || typeof warRoom !== "object") return "";
+  const identity = warRoom as Record<string, unknown>;
+  const sleeperUserId = typeof identity.sleeper_user_id === "string" ? identity.sleeper_user_id : "";
+  const sleeperUsername = typeof identity.sleeper_username === "string" ? identity.sleeper_username : "";
+  if (!sleeperUserId) return "";
+  return new URLSearchParams({ sleeperUserId, sleeperUsername }).toString();
+}
+
 export default async function MonitoringCenterPage({ params, searchParams }: PageProps) {
   const [{ leagueId }, query] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
@@ -41,6 +52,8 @@ export default async function MonitoringCenterPage({ params, searchParams }: Pag
   const enabled = subscription?.enabled ?? false;
   const cadence = Number(subscription?.cadence_minutes ?? 30);
   const threshold = Number(subscription?.market_add_threshold ?? 150);
+  const identityQuery = managerQuery(league.provider_payload);
+  const missionControlHref = identityQuery ? `/command/${leagueId}?${identityQuery}` : `/league/${leagueId}`;
 
   return (
     <div className="page-wrap">
@@ -52,7 +65,7 @@ export default async function MonitoringCenterPage({ params, searchParams }: Pag
         </div>
         <div className="hero-cta">
           <span className="status-chip">{enabled ? "MONITORING ACTIVE" : "MONITORING OFF"}</span>
-          <Link href={`/command/${leagueId}`} className="connect-button">Open Mission Control →</Link>
+          <Link href={missionControlHref} className="connect-button">{identityQuery ? "Open Mission Control →" : "Open decision room →"}</Link>
           <Link href={`/memory/${leagueId}`} className="status-chip">Decision Memory</Link>
         </div>
       </section>
