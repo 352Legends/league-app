@@ -18,13 +18,13 @@ function readManagerIdentity(payload: unknown): ManagerIdentity {
   };
 }
 
-function liveLeagueHref(providerLeagueId: string, payload: unknown): string {
+function featureHref(base: string, providerLeagueId: string, payload: unknown): string {
   const identity = readManagerIdentity(payload);
   const query = new URLSearchParams();
   if (identity.sleeperUserId) query.set("sleeperUserId", identity.sleeperUserId);
   if (identity.sleeperUsername) query.set("sleeperUsername", identity.sleeperUsername);
   const suffix = query.toString();
-  return `/league/${providerLeagueId}${suffix ? `?${suffix}` : ""}`;
+  return `${base}/${providerLeagueId}${suffix ? `?${suffix}` : ""}`;
 }
 
 export default async function SavedLeaguesPage() {
@@ -50,7 +50,7 @@ export default async function SavedLeaguesPage() {
   return (
     <div className="page-wrap">
       <section className="hero-panel">
-        <div><p className="eyebrow">PERSISTENT LEAGUE INTELLIGENCE</p><h1>Your saved WAR ROOM leagues.</h1><p className="lede">Saved leagues now preserve the fantasy-manager identity needed to reopen the live waiver and add/drop decision engine.</p></div>
+        <div><p className="eyebrow">PERSISTENT LEAGUE INTELLIGENCE</p><h1>Your saved WAR ROOM leagues.</h1><p className="lede">Saved leagues preserve the manager identity needed to reopen lineup, waiver, breakout and trade intelligence without reconnecting the roster.</p></div>
         <Link href="/connect" className="connect-button">Add another league</Link>
       </section>
       <section className="section-block">
@@ -60,6 +60,7 @@ export default async function SavedLeaguesPage() {
         <div className="league-list">
           {leagues?.map((league) => {
             const identity = readManagerIdentity(league.provider_payload);
+            const canPersonalize = Boolean(identity.sleeperUserId);
             return (
               <article className="league-card" key={league.id}>
                 <div>
@@ -67,7 +68,11 @@ export default async function SavedLeaguesPage() {
                   <h3>{league.name}</h3>
                   <p>{league.total_rosters ?? "—"} teams · {league.status ?? "unknown"} · Last synced {league.last_synced_at ? new Date(league.last_synced_at).toLocaleString() : "never"}</p>
                 </div>
-                <Link href={liveLeagueHref(league.provider_league_id, league.provider_payload)} className="connect-button">Open decision room →</Link>
+                <div className="hero-cta">
+                  <Link href={featureHref("/league", league.provider_league_id, league.provider_payload)} className="connect-button">Open decision room →</Link>
+                  {canPersonalize ? <Link href={featureHref("/trades", league.provider_league_id, league.provider_payload)} className="status-chip">Trade Center</Link> : null}
+                  {canPersonalize ? <Link href={featureHref("/breakouts", league.provider_league_id, league.provider_payload)} className="status-chip">Breakout Radar</Link> : null}
+                </div>
               </article>
             );
           })}
