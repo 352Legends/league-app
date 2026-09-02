@@ -39,12 +39,22 @@ export function DecisionMemorySync({ payload }: { payload: DecisionMemorySnapsho
         }
         if (!response.ok) throw new Error(result.error || "Decision Memory save failed");
 
+        // A successful Mission Control evaluation satisfies any background alert that requested
+        // a full recalculation. Alert resolution is best-effort and never invalidates the snapshot.
+        await fetch("/api/monitoring/alerts/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ providerLeagueId: payload.providerLeagueId }),
+          signal: controller.signal,
+        }).catch(() => undefined);
+        if (!active) return;
+
         if (result.duplicate) {
           setState("duplicate");
-          setMessage("Decision Memory is current; this evaluation already exists.");
+          setMessage("Decision Memory is current; this evaluation already exists and monitoring alerts were reconciled.");
         } else {
           setState("saved");
-          setMessage("Decision Memory recorded this evaluation for future comparison.");
+          setMessage("Decision Memory recorded this evaluation and reconciled background monitoring alerts.");
         }
       } catch (error) {
         if (!active || controller.signal.aborted) return;
@@ -58,7 +68,7 @@ export function DecisionMemorySync({ payload }: { payload: DecisionMemorySnapsho
       active = false;
       controller.abort();
     };
-  }, [body]);
+  }, [body, payload.providerLeagueId]);
 
   return (
     <div className={`memory-sync memory-sync--${state}`} aria-live="polite">
