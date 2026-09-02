@@ -31,11 +31,12 @@ function sleeperFeatureHref(base: string, providerLeagueId: string, payload: unk
   return `${base}/${providerLeagueId}${suffix ? `?${suffix}` : ""}`;
 }
 
-function espnHref(providerLeagueId: string, season: number, payload: unknown): string {
+function espnFeatureHref(base: "league" | "command", providerLeagueId: string, season: number, payload: unknown): string {
   const identity = readManagerIdentity(payload);
   const query = new URLSearchParams({ season: String(season) });
   if (identity.espnTeamId != null) query.set("teamId", String(identity.espnTeamId));
-  return `/espn/${providerLeagueId}?${query.toString()}`;
+  const route = base === "command" ? `/espn/${providerLeagueId}/command` : `/espn/${providerLeagueId}`;
+  return `${route}?${query.toString()}`;
 }
 
 export default async function SavedLeaguesPage() {
@@ -73,6 +74,7 @@ export default async function SavedLeaguesPage() {
             const identity = readManagerIdentity(league.provider_payload);
             const isEspn = league.provider === "espn";
             const canPersonalizeSleeper = Boolean(identity.sleeperUserId);
+            const canPersonalizeEspn = identity.espnTeamId != null;
             return (
               <article className="league-card" key={league.id}>
                 <div>
@@ -83,7 +85,12 @@ export default async function SavedLeaguesPage() {
                 <div className="hero-cta">
                   {isEspn ? (
                     <>
-                      <Link href={espnHref(league.provider_league_id, league.season, league.provider_payload)} className="connect-button">Open ESPN WAR ROOM →</Link>
+                      {canPersonalizeEspn ? (
+                        <Link href={espnFeatureHref("command", league.provider_league_id, league.season, league.provider_payload)} className="connect-button">Open ESPN Mission Control →</Link>
+                      ) : (
+                        <Link href={espnFeatureHref("league", league.provider_league_id, league.season, league.provider_payload)} className="connect-button">Choose ESPN team →</Link>
+                      )}
+                      <Link href={espnFeatureHref("league", league.provider_league_id, league.season, league.provider_payload)} className="status-chip">ESPN decision room</Link>
                       <span className="status-chip">ESPN ADAPTER</span>
                     </>
                   ) : (
