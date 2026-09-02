@@ -50,6 +50,7 @@ export type PreviousTopRecommendation = {
   urgency: number | null;
   priorityScore: number | null;
   championshipDelta: number | null;
+  reasons: string[];
 };
 
 export type DecisionMemoryChange = {
@@ -132,6 +133,12 @@ export function compareDecisionMemory(args: {
     if (impactShift >= 0.5) details.push(`The same #1 move strengthened by ${signed(impactShift)} of modeled championship impact.`);
     if (impactShift <= -0.5) details.push(`The same #1 move weakened by ${signed(Math.abs(impactShift))} of modeled championship impact.`);
     if (Math.abs(urgencyShift) >= 10) details.push(`Its urgency score moved ${signed(urgencyShift, " points")}, indicating a meaningful timing or market shift.`);
+
+    const previousReasonSet = new Set(previousTop.reasons);
+    const newReasons = currentTop.reasons.filter((reason) => !previousReasonSet.has(reason));
+    if (newReasons.length) {
+      details.push(`New evidence entered the #1 recommendation: ${newReasons.slice(0, 2).join(" / ")}`);
+    }
   }
 
   if (topChanged) {
