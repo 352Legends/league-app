@@ -4,6 +4,7 @@ import "./globals.css";
 import "./scheme.css";
 import "./breakouts.css";
 import "./trades.css";
+import "./championship.css";
 
 export const metadata: Metadata = {
   title: "WAR ROOM · Fantasy Football Championship Intelligence",
@@ -17,6 +18,7 @@ const nav = [
   ["Waivers", "/connect"],
   ["Trades", "/trades"],
   ["Breakout Radar", "/breakouts"],
+  ["Championship", "/championship"],
   ["Chess Mode", "/connect"],
 ];
 
