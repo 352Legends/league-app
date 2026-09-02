@@ -81,6 +81,32 @@ export type SleeperTrendingPlayer = {
   count: number;
 };
 
+export type SleeperDraftPick = {
+  season: string;
+  round: number;
+  roster_id: number;
+  previous_owner_id: number;
+  owner_id: number;
+};
+
+export type SleeperTransaction = {
+  type: string;
+  transaction_id: string;
+  status_updated: number;
+  status: string;
+  roster_ids: number[];
+  metadata: Record<string, string> | null;
+  leg: number;
+  drops: Record<string, number> | null;
+  draft_picks: SleeperDraftPick[];
+  creator: string | null;
+  created: number;
+  consenter_ids: number[];
+  adds: Record<string, number> | null;
+  settings: Record<string, number | string | null> | null;
+  waiver_budget: Array<{ sender: number; receiver: number; amount: number }>;
+};
+
 export type SleeperNflState = {
   week: number;
   leg: number;
