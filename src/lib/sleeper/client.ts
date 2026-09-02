@@ -6,6 +6,7 @@ import type {
   SleeperNflState,
   SleeperPlayer,
   SleeperRoster,
+  SleeperTransaction,
   SleeperTrendingPlayer,
   SleeperUser,
 } from "./types";
@@ -25,7 +26,7 @@ export class SleeperApiError extends Error {
 
 async function sleeperFetch<T>(path: string, revalidate = 60): Promise<T> {
   const response = await fetch(`${BASE_URL}${path}`, {
-    headers: { Accept: "application/json", "User-Agent": "WAR-ROOM/0.2" },
+    headers: { Accept: "application/json", "User-Agent": "WAR-ROOM/0.6" },
     next: { revalidate },
   });
 
@@ -61,6 +62,9 @@ export const sleeper = {
   },
   getMatchups(leagueId: string, week: number) {
     return sleeperFetch<SleeperMatchup[]>(`/league/${encodeURIComponent(leagueId)}/matchups/${week}`, 30);
+  },
+  getTransactions(leagueId: string, week: number) {
+    return sleeperFetch<SleeperTransaction[]>(`/league/${encodeURIComponent(leagueId)}/transactions/${week}`, 120);
   },
   getDrafts(leagueId: string) {
     return sleeperFetch<SleeperDraft[]>(`/league/${encodeURIComponent(leagueId)}/drafts`, 300);
