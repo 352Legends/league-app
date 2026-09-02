@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 
 const nav = [
   ["Command Center", "/command"],
+  ["Automated GM", "/monitoring"],
   ["My Team", "/connect"],
   ["This Week", "/connect"],
   ["Waivers", "/connect"],
@@ -42,7 +43,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </nav>
             <div className="sidebar-footer">
               <span className="pulse" />
-              <div><strong>Data engine</strong><small>Sleeper + nflverse live</small></div>
+              <div><strong>Data engine</strong><small>Sleeper + nflverse + Automated GM</small></div>
             </div>
           </aside>
           <main className="main-shell">
