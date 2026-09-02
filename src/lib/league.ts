@@ -50,7 +50,7 @@ export function buildTeamSummaries(
         rosterId: roster.roster_id,
         ownerId: roster.owner_id,
         ownerName: owner?.display_name ?? owner?.username ?? `Roster ${roster.roster_id}`,
-        teamName: owner?.metadata?.team_name ?? owner?.display_name ?? `Team ${roster.roster_id}`,
+        teamName: roster.metadata?.team_name ?? owner?.metadata?.team_name ?? owner?.display_name ?? `Team ${roster.roster_id}`,
         wins: Number(roster.settings.wins ?? 0),
         losses: Number(roster.settings.losses ?? 0),
         ties: Number(roster.settings.ties ?? 0),
