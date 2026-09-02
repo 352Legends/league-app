@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import "./scheme.css";
 
 export const metadata: Metadata = {
   title: "WAR ROOM · Fantasy Football Championship Intelligence",
