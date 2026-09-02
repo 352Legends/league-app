@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 export async function POST(request: Request) {
   const form = await request.formData();
   const leagueId = String(form.get("leagueId") ?? "").trim();
+  const sleeperUserId = String(form.get("sleeperUserId") ?? "").trim() || null;
+  const sleeperUsername = String(form.get("sleeperUsername") ?? "").trim() || null;
   if (!leagueId) return NextResponse.json({ error: "leagueId is required" }, { status: 400 });
 
   const supabase = await createClient();
@@ -22,6 +24,10 @@ export async function POST(request: Request) {
     ]);
     const matchups = await sleeper.getMatchups(leagueId, state.week);
     const teams = buildTeamSummaries(rosters, users, matchups, players);
+    const managerIdentity = {
+      sleeper_user_id: sleeperUserId,
+      sleeper_username: sleeperUsername,
+    };
 
     const { data: savedLeague, error: leagueError } = await supabase
       .from("fantasy_leagues")
@@ -36,7 +42,7 @@ export async function POST(request: Request) {
         roster_positions: league.roster_positions,
         scoring_settings: league.scoring_settings,
         settings: league.settings,
-        provider_payload: league,
+        provider_payload: { ...league, war_room: managerIdentity },
         last_synced_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, { onConflict: "user_id,provider,provider_league_id" })
@@ -58,7 +64,10 @@ export async function POST(request: Request) {
         ties: team.ties,
         points_for: team.pointsFor,
         settings: raw.settings,
-        provider_payload: raw,
+        provider_payload: {
+          ...raw,
+          war_room: { is_user_roster: Boolean(sleeperUserId && raw.owner_id === sleeperUserId) },
+        },
         updated_at: new Date().toISOString(),
       };
     });
@@ -122,7 +131,7 @@ export async function POST(request: Request) {
       status: "succeeded",
       finished_at: new Date().toISOString(),
       records_written: 1 + teamRows.length + rosterRows.length + matchupRows.length,
-      metadata: { season: league.season, week: state.week },
+      metadata: { season: league.season, week: state.week, manager: managerIdentity },
     });
 
     return NextResponse.redirect(new URL(`/saved?league=${leagueUuid}`, request.url), 303);
