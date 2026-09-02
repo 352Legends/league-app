@@ -53,6 +53,7 @@ function stableFingerprint(payload: z.infer<typeof snapshotSchema>): string {
       playoffDelta: priority.playoffDelta == null ? null : Number(priority.playoffDelta.toFixed(2)),
       urgency: Number(priority.urgency.toFixed(1)),
       confidence: priority.confidence,
+      reasons: priority.reasons,
     })),
   };
   return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
