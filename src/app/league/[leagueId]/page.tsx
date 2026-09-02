@@ -25,7 +25,14 @@ export default async function LeaguePage({ params }: { params: Promise<{ leagueI
             <h1>{league.name}</h1>
             <p className="lede">Week {state.week} · {league.total_rosters} teams · {league.season} season · {drafts.length} draft record{drafts.length === 1 ? "" : "s"}</p>
           </div>
-          <Link href="/connect" className="connect-button">Switch league</Link>
+          <div className="hero-cta">
+            <form action="/api/leagues/import" method="post">
+              <input type="hidden" name="leagueId" value={leagueId} />
+              <button type="submit" className="connect-button">Save to WAR ROOM</button>
+            </form>
+            <Link href="/saved" className="status-chip">Saved leagues</Link>
+            <Link href="/connect" className="status-chip">Switch league</Link>
+          </div>
         </section>
 
         <section className="metric-grid">
